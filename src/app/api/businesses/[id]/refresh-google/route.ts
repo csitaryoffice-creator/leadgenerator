@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireApiUser } from "@/lib/auth";
 import { getBusiness } from "@/lib/data/businesses";
 import { queueGoogleRefresh } from "@/lib/search/jobs";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function POST(_request: Request, context: { params: Promise<{ id: string }> }) {
   const auth = await requireApiUser();
@@ -13,6 +14,7 @@ export async function POST(_request: Request, context: { params: Promise<{ id: s
     return NextResponse.json({ error: "Ez a rekord nem rendelkezik Google Place ID-val." }, { status: 422 });
   }
 
-  const job = await queueGoogleRefresh(auth.supabase, auth.user.id, id, business.google_place_id);
+  const admin = createAdminClient();
+  const job = await queueGoogleRefresh(admin, auth.user.id, id, business.google_place_id);
   return NextResponse.json({ job });
 }

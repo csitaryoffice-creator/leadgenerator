@@ -54,9 +54,21 @@ type SearchJobRow = {
   target_folder_id: string | null;
   target_list_id: string | null;
   auto_email_crawl: boolean;
+  saved_businesses_count: number;
 };
 
 export type WebsiteCondition = SearchJobRow["website_condition"];
+
+export type SearchTaskDefinition = {
+  owner_id: string;
+  job_id: string;
+  task_key: string;
+  params: SearchTaskParams;
+};
+
+export function plannedSearchTaskCount(desiredCount: number) {
+  return Math.max(1, Math.ceil(desiredCount / 20));
+}
 
 export async function createSearchJob(client: SupabaseClient, ownerId: string, input: SearchJobInput) {
   const { data: job, error } = await client
@@ -108,48 +120,80 @@ export async function cancelSearchJob(client: SupabaseClient, ownerId: string, j
     throw error;
   }
 
-  await client
+  const { error: taskError } = await client
     .from("search_tasks")
     .update({ status: "cancelled", finished_at: now })
     .eq("owner_id", ownerId)
     .eq("job_id", jobId)
     .in("status", ["queued", "running"]);
+
+  if (taskError) {
+    throw taskError;
+  }
 }
 
-function splitViewport(viewport: GoogleViewport | null, desiredCount: number) {
-  if (!viewport || desiredCount <= 60) {
+export function splitViewport(viewport: GoogleViewport | null, desiredCount: number) {
+  const cells = plannedSearchTaskCount(desiredCount);
+
+  if (!viewport || cells <= 1) {
     return [undefined];
   }
 
-  const cells = Math.min(25, Math.max(4, Math.ceil(desiredCount / 20)));
-  const rows = Math.ceil(Math.sqrt(cells));
-  const cols = Math.ceil(cells / rows);
-  const latStep = (viewport.high.latitude - viewport.low.latitude) / rows;
-  const lngStep = (viewport.high.longitude - viewport.low.longitude) / cols;
+  const lngStep = (viewport.high.longitude - viewport.low.longitude) / cells;
   const result: Array<{ rectangle: GoogleViewport }> = [];
 
-  for (let row = 0; row < rows; row += 1) {
-    for (let col = 0; col < cols; col += 1) {
-      if (result.length >= cells) {
-        break;
-      }
-
-      result.push({
-        rectangle: {
-          low: {
-            latitude: viewport.low.latitude + row * latStep,
-            longitude: viewport.low.longitude + col * lngStep
-          },
-          high: {
-            latitude: viewport.low.latitude + (row + 1) * latStep,
-            longitude: viewport.low.longitude + (col + 1) * lngStep
-          }
+  for (let cell = 0; cell < cells; cell += 1) {
+    result.push({
+      rectangle: {
+        low: {
+          latitude: viewport.low.latitude,
+          longitude: viewport.low.longitude + cell * lngStep
+        },
+        high: {
+          latitude: viewport.high.latitude,
+          longitude: viewport.low.longitude + (cell + 1) * lngStep
         }
-      });
-    }
+      }
+    });
   }
 
   return result;
+}
+
+export function buildSearchTaskDefinitions(
+  job: Pick<SearchJobRow, "id" | "owner_id" | "category" | "desired_count" | "country" | "region" | "city">,
+  viewport: GoogleViewport | null
+): SearchTaskDefinition[] {
+  const cells = splitViewport(viewport, job.desired_count);
+  const query = buildTextSearchQuery(job.category, job.country, job.region, job.city);
+  let remaining = job.desired_count;
+
+  return cells
+    .map((cell, index) => {
+      const maxResultCount = Math.min(20, Math.max(0, remaining));
+      remaining -= maxResultCount;
+
+      return {
+        owner_id: job.owner_id,
+        job_id: job.id,
+        task_key: `search:${index}`,
+        params: {
+          type: "search",
+          query,
+          maxResultCount,
+          locationRestriction: cell
+        } satisfies SearchTaskParams
+      };
+    })
+    .filter((task) => task.params.maxResultCount > 0);
+}
+
+export function remainingNewLeadSlotsValue(desiredCount: number, savedBusinessesCount: number) {
+  return Math.max(0, desiredCount - savedBusinessesCount);
+}
+
+export function canSaveNewLead(desiredCount: number, savedBeforeTask: number, savedInTask: number) {
+  return savedBeforeTask + savedInTask < desiredCount;
 }
 
 export function geographyMatches(place: NormalizedPlace, job: Pick<SearchJobRow, "country" | "region" | "city">) {
@@ -201,6 +245,28 @@ async function getJob(client: SupabaseClient, jobId: string) {
   const { data, error } = await client.from("search_jobs").select("*").eq("id", jobId).single();
   if (error) throw error;
   return data as SearchJobRow;
+}
+
+async function getRemainingNewLeadSlots(client: SupabaseClient, jobId: string, fallbackDesiredCount: number) {
+  const { data, error } = await client
+    .from("search_jobs")
+    .select("desired_count,saved_businesses_count")
+    .eq("id", jobId)
+    .single();
+
+  if (error) throw error;
+
+  return remainingNewLeadSlotsValue(data?.desired_count ?? fallbackDesiredCount, data?.saved_businesses_count ?? 0);
+}
+
+async function cancelQueuedSearchTasks(client: SupabaseClient, jobId: string) {
+  const { error } = await client
+    .from("search_tasks")
+    .update({ status: "cancelled", finished_at: new Date().toISOString() })
+    .eq("job_id", jobId)
+    .eq("status", "queued");
+
+  if (error) throw error;
 }
 
 async function incrementCounters(client: SupabaseClient, jobId: string, counters: Record<string, number>) {
@@ -255,7 +321,7 @@ async function retryTask(client: SupabaseClient, task: SearchTaskRow, error: unk
 }
 
 async function planSearch(client: SupabaseClient, task: SearchTaskRow, job: SearchJobRow) {
-  const shouldSplit = job.desired_count > 60;
+  const shouldSplit = job.desired_count > 20;
   let viewport: GoogleViewport | null = null;
 
   if (shouldSplit) {
@@ -275,19 +341,7 @@ async function planSearch(client: SupabaseClient, task: SearchTaskRow, job: Sear
     }
   }
 
-  const cells = splitViewport(viewport, job.desired_count);
-  const query = buildTextSearchQuery(job.category, job.country, job.region, job.city);
-  const tasks = cells.map((cell, index) => ({
-    owner_id: job.owner_id,
-    job_id: job.id,
-    task_key: `search:${index}`,
-    params: {
-      type: "search",
-      query,
-      maxResultCount: Math.min(20, Math.max(1, job.desired_count)),
-      locationRestriction: cell
-    } satisfies SearchTaskParams
-  }));
+  const tasks = buildSearchTaskDefinitions(job, viewport);
 
   const { error } = await client.from("search_tasks").upsert(tasks, { onConflict: "job_id,task_key" });
   if (error) throw error;
@@ -423,10 +477,20 @@ async function crawlAndPersist(client: SupabaseClient, ownerId: string, business
 }
 
 async function processSearch(client: SupabaseClient, task: SearchTaskRow, job: SearchJobRow, params: SearchTaskParams) {
+  const remainingAtStart = await getRemainingNewLeadSlots(client, job.id, job.desired_count);
+  const savedBeforeTask = job.desired_count - remainingAtStart;
+
+  if (remainingAtStart <= 0) {
+    await cancelQueuedSearchTasks(client, job.id);
+    await incrementCounters(client, job.id, { processedTasks: 1 });
+    await finishTask(client, task.id, "completed");
+    return;
+  }
+
   const places = await searchPlacesText({
     ownerId: job.owner_id,
     query: params.query,
-    maxResultCount: params.maxResultCount,
+    maxResultCount: Math.min(params.maxResultCount, remainingAtStart),
     locationRestriction: params.locationRestriction
   });
 
@@ -437,6 +501,10 @@ async function processSearch(client: SupabaseClient, task: SearchTaskRow, job: S
   let emails = 0;
 
   for (const place of places) {
+    if (!canSaveNewLead(job.desired_count, savedBeforeTask, saved)) {
+      break;
+    }
+
     if (!geographyMatches(place, job) || !websiteConditionMatches(place, job.website_condition)) {
       excluded += 1;
       continue;
@@ -454,6 +522,10 @@ async function processSearch(client: SupabaseClient, task: SearchTaskRow, job: S
       crawled += crawl.pagesChecked > 0 ? 1 : 0;
       emails += crawl.emails.length;
     }
+  }
+
+  if (remainingNewLeadSlotsValue(job.desired_count, savedBeforeTask + saved) <= 0) {
+    await cancelQueuedSearchTasks(client, job.id);
   }
 
   await incrementCounters(client, job.id, {

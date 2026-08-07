@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireApiUser } from "@/lib/auth";
 import { createSearchJob } from "@/lib/search/jobs";
 import { estimateGoogleCalls } from "@/lib/google/usage";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { searchJobInputSchema } from "@/lib/validators";
 
 export async function GET() {
@@ -31,9 +32,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Hibás keresési adatok." }, { status: 422 });
   }
 
-  const job = await createSearchJob(auth.supabase, auth.user.id, parsed.data);
+  const admin = createAdminClient();
+  const job = await createSearchJob(admin, auth.user.id, parsed.data);
   return NextResponse.json({
     job,
-    estimate: estimateGoogleCalls(parsed.data.desiredCount, parsed.data.desiredCount > 60)
+    estimate: estimateGoogleCalls(parsed.data.desiredCount, parsed.data.desiredCount > 20)
   });
 }

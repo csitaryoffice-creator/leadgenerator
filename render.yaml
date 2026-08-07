@@ -1,10 +1,10 @@
 services:
   - type: web
-    name: leadgyujto-web
+    name: leadgyujto
     runtime: node
-    plan: starter
+    plan: free
     buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm build
-    startCommand: pnpm start
+    startCommand: pnpm start:render
     envVars:
       - key: NODE_VERSION
         value: 24
@@ -24,35 +24,6 @@ services:
         sync: false
       - key: NEXT_PUBLIC_APP_URL
         sync: false
-      - key: CRAWLER_TIMEOUT_MS
-        value: 7000
-      - key: CRAWLER_MAX_PAGES_PER_BUSINESS
-        value: 10
-      - key: CRAWLER_MAX_RESPONSE_BYTES
-        value: 1048576
-      - key: CRAWLER_CONCURRENCY
-        value: 2
-  - type: worker
-    name: leadgyujto-worker
-    runtime: node
-    plan: starter
-    buildCommand: corepack enable && pnpm install --frozen-lockfile
-    startCommand: pnpm worker
-    envVars:
-      - key: NODE_VERSION
-        value: 24
-      - key: NEXT_PUBLIC_SUPABASE_URL
-        sync: false
-      - key: NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
-        sync: false
-      - key: SUPABASE_SERVICE_ROLE_KEY
-        sync: false
-      - key: GOOGLE_MAPS_API_KEY
-        sync: false
-      - key: ALLOWED_USER_EMAIL
-        sync: false
-      - key: GOOGLE_MONTHLY_REQUEST_LIMIT
-        value: 900
       - key: CRAWLER_TIMEOUT_MS
         value: 7000
       - key: CRAWLER_MAX_PAGES_PER_BUSINESS

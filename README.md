@@ -100,10 +100,11 @@ A worker kezeli:
 
 ## Render telepítés
 
-A `render.yaml` két service-t tartalmaz:
+A `render.yaml` egyetlen Render Web Service-t indít `leadgyujto` néven. A szolgáltatás a `pnpm start:render` paranccsal közös életciklusban futtatja a Next.js webalkalmazást és a workert.
 
-- `leadgyujto-web`: Next.js web service;
-- `leadgyujto-worker`: background worker.
+Ez az első teszttelepítéshez `free` csomagra van állítva. Free Web Service esetén Render inaktivitás után elaltatja a szolgáltatást; ilyenkor a worker is megáll, és csak akkor indul újra, amikor a web service felébred. Folyamatos háttérfeldolgozáshoz később fizetős web service-re kell váltani, vagy külön workert kell fenntartani.
+
+A supervisor folyamat mindkét gyerekfolyamatot figyeli. Ha akár a Next.js webalkalmazás, akár a worker végzetesen leáll, a másik folyamatot is leállítja, majd a Render service kilép, hogy a platform újraindíthassa.
 
 Lépések:
 
