@@ -1,4 +1,4 @@
-/* global console, process, setTimeout */
+/* global clearTimeout, console, process, setTimeout */
 
 import { spawn } from "node:child_process";
 
@@ -16,8 +16,34 @@ const processes = [
 ];
 
 const children = new Map();
+const restartTimers = new Map();
+const workerRestartDelayMs = 5000;
 let shuttingDown = false;
 let finalExitCode = 0;
+
+function clearRestartTimers() {
+  for (const timer of restartTimers.values()) {
+    clearTimeout(timer);
+  }
+  restartTimers.clear();
+}
+
+function scheduleWorkerRestart(definition) {
+  if (shuttingDown || restartTimers.has(definition.name)) {
+    return;
+  }
+
+  const timer = setTimeout(() => {
+    restartTimers.delete(definition.name);
+
+    if (!shuttingDown) {
+      console.error("restarting worker after failure");
+      startProcess(definition);
+    }
+  }, workerRestartDelayMs);
+
+  restartTimers.set(definition.name, timer);
+}
 
 function stopAll(exitCode) {
   if (shuttingDown) {
@@ -26,6 +52,7 @@ function stopAll(exitCode) {
 
   shuttingDown = true;
   finalExitCode = exitCode;
+  clearRestartTimers();
 
   for (const child of children.values()) {
     if (!child.killed) {
@@ -62,6 +89,12 @@ function startProcess(definition) {
     if (!shuttingDown) {
       const exitCode = code ?? 1;
       console.error(`${definition.name} exited unexpectedly`, { code, signal });
+
+      if (definition.name === "worker") {
+        scheduleWorkerRestart(definition);
+        return;
+      }
+
       stopAll(exitCode === 0 ? 1 : exitCode);
       return;
     }
@@ -73,6 +106,12 @@ function startProcess(definition) {
 
   child.on("error", (error) => {
     console.error(`${definition.name} failed to start`, error);
+
+    if (definition.name === "worker") {
+      scheduleWorkerRestart(definition);
+      return;
+    }
+
     stopAll(1);
   });
 }

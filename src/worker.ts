@@ -23,13 +23,23 @@ async function main() {
   log("info", "Leadgyűjtő worker elindult.");
 
   while (!shuttingDown) {
-    const task = await claimSearchTask(client);
-    if (!task) {
-      await sleep(idleMs);
-      continue;
-    }
+    try {
+      const task = await claimSearchTask(client);
 
-    await processSearchTask(client, task);
+      if (!task) {
+        await sleep(idleMs);
+        continue;
+      }
+
+      await processSearchTask(client, task);
+    } catch (error) {
+      log(
+        "error",
+        "A worker ciklusa hibába futott; újrapróbálkozás következik.",
+        { error }
+      );
+      await sleep(idleMs);
+    }
   }
 
   log("info", "Leadgyűjtő worker leáll.");
