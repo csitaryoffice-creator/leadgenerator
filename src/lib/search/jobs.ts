@@ -495,6 +495,8 @@ async function processSearch(client: SupabaseClient, task: SearchTaskRow, job: S
   });
 
   let excluded = 0;
+  let excludedByGeography = 0;
+  let excludedByWebsiteCondition = 0;
   let saved = 0;
   let duplicate = 0;
   let crawled = 0;
@@ -505,8 +507,33 @@ async function processSearch(client: SupabaseClient, task: SearchTaskRow, job: S
       break;
     }
 
-    if (!geographyMatches(place, job) || !websiteConditionMatches(place, job.website_condition)) {
+    const geographyMatchesJob = geographyMatches(place, job);
+    const websiteConditionMatchesJob = websiteConditionMatches(place, job.website_condition);
+
+    if (!geographyMatchesJob || !websiteConditionMatchesJob) {
       excluded += 1;
+
+      const exclusionReasons = [];
+      if (!geographyMatchesJob) {
+        excludedByGeography += 1;
+        exclusionReasons.push("geography_mismatch");
+      }
+      if (!websiteConditionMatchesJob) {
+        excludedByWebsiteCondition += 1;
+        exclusionReasons.push("website_condition_mismatch");
+      }
+
+      log("info", "Google place excluded by search filters.", {
+        businessName: place.display_name,
+        formattedAddress: place.formatted_address,
+        placeCountry: place.country,
+        placeRegion: place.region,
+        placeCity: place.city,
+        jobCountry: job.country,
+        jobRegion: job.region,
+        jobCity: job.city,
+        exclusionReasons
+      });
       continue;
     }
 
@@ -526,6 +553,14 @@ async function processSearch(client: SupabaseClient, task: SearchTaskRow, job: S
 
   if (remainingNewLeadSlotsValue(job.desired_count, savedBeforeTask + saved) <= 0) {
     await cancelQueuedSearchTasks(client, job.id);
+  }
+
+  if (excluded > 0) {
+    log("info", "Google place exclusion summary.", {
+      excluded,
+      excludedByGeography,
+      excludedByWebsiteCondition
+    });
   }
 
   await incrementCounters(client, job.id, {
