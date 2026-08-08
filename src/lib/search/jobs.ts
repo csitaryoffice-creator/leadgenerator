@@ -578,7 +578,14 @@ async function processRefreshGoogle(client: SupabaseClient, task: SearchTaskRow,
 export async function claimSearchTask(client: SupabaseClient) {
   const { data, error } = await client.rpc("claim_search_task");
   if (error) throw error;
-  return data as SearchTaskRow | null;
+
+  const task = Array.isArray(data) ? data[0] : data;
+
+  if (!task?.id || !task?.job_id || !task?.owner_id) {
+    return null;
+  }
+
+  return task as SearchTaskRow;
 }
 
 export async function processSearchTask(client: SupabaseClient, task: SearchTaskRow) {

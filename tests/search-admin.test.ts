@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { createSearchJob } from "@/lib/search/jobs";
+import { claimSearchTask, createSearchJob } from "@/lib/search/jobs";
 import { searchJobInputSchema } from "@/lib/validators";
 
 const verifiedOwnerId = "00000000-0000-4000-8000-000000000001";
@@ -86,5 +86,35 @@ describe("search job server ownership", () => {
 
     expect(migration).toContain("create policy search_tasks_owner_select");
     expect(migration).not.toMatch(/create policy\s+\w+\s+on public\.search_tasks\s+for\s+(insert|update|all)\s+to authenticated/i);
+  });
+});
+
+describe("claim search task RPC response", () => {
+  const validTask = {
+    id: "00000000-0000-4000-8000-000000000010",
+    job_id: "00000000-0000-4000-8000-000000000011",
+    owner_id: verifiedOwnerId
+  };
+
+  function clientWithRpcResult(data: unknown) {
+    return {
+      rpc: async () => ({ data, error: null })
+    } as unknown as SupabaseClient;
+  }
+
+  it("returns null for a null RPC response", async () => {
+    await expect(claimSearchTask(clientWithRpcResult(null))).resolves.toBeNull();
+  });
+
+  it("returns null for a task with null required fields", async () => {
+    await expect(
+      claimSearchTask(
+        clientWithRpcResult({ id: "00000000-0000-4000-8000-000000000010", job_id: null, owner_id: null })
+      )
+    ).resolves.toBeNull();
+  });
+
+  it("returns a valid task unchanged", async () => {
+    await expect(claimSearchTask(clientWithRpcResult(validTask))).resolves.toBe(validTask);
   });
 });
