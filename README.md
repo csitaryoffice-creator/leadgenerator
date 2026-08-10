@@ -158,3 +158,10 @@ A weboldal-feldolgozó:
 ## Adatbázismentés
 
 Supabase-ben használj rendszeres projekt backupot vagy `pg_dump` alapú mentést. Éles használat előtt állíts be visszaállítási próbát is.
+## Lead státuszok és háttérfeldolgozás
+
+A leadek stabil státuszai: `new`, `contacted`, `follow_up`, `interested`, `not_interested`, `converted`. A státusz és a `contacted_at` időpont az adatbázisban perzisztens; az új és a korábbi rekordok alapértéke `new`. A migráció: `supabase/migrations/202608100001_lead_statuses.sql`.
+
+A Google-találat mentése után az e-mail-felderítés külön háttérfeladatként fut. Így a lead azonnal megjelenhet, a lassú vagy hibás weboldal nem tartja fel a keresést, és a manuális e-mail rekordokat az automatikus crawler nem írja felül.
+
+Renderen a web és a worker egyetlen Free Web Service-ben fut. A worker hibája után öt másodperccel újraindul, a webfolyamat hibája viszont újraindítja a teljes service-t. A Free csomag elalvásakor a worker is megáll; folyamatos háttérfeldolgozáshoz ébren tartott vagy fizetős szolgáltatás szükséges.

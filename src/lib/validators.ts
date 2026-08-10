@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export const websiteConditionSchema = z.enum(["any", "with_website", "without_google_website"]);
+export const leadStatusSchema = z.enum(["new", "contacted", "follow_up", "interested", "not_interested", "converted"]);
 
 export const searchJobInputSchema = z.object({
   category: z.string().trim().min(2, "Adj meg legalább két karakteres kategóriát vagy keresőkifejezést."),
@@ -28,7 +29,8 @@ export const businessInputSchema = z.object({
 });
 
 export const businessPatchSchema = businessInputSchema.partial().extend({
-  id: z.string().uuid()
+  id: z.string().uuid(),
+  leadStatus: leadStatusSchema.optional()
 });
 
 export const businessQuerySchema = z.object({
@@ -44,6 +46,7 @@ export const businessQuerySchema = z.object({
   email: z.enum(["", "yes", "no"]).default(""),
   phone: z.enum(["", "yes", "no"]).default(""),
   source: z.string().trim().optional().default(""),
+  status: z.string().trim().optional().default(""),
   folderId: z.string().uuid().optional().nullable(),
   listId: z.string().uuid().optional().nullable(),
   deleted: z.coerce.boolean().default(false)

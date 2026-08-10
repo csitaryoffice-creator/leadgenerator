@@ -1,13 +1,16 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Square } from "lucide-react";
 import { Badge } from "@/components/ui";
+import { leadProgress } from "@/lib/lead-status";
 
 type Job = {
   id: string;
   status: string;
   category: string;
+  desired_count: number;
   country: string;
   region: string | null;
   city: string | null;
@@ -32,15 +35,30 @@ function statusTone(status: string) {
 
 export function SearchJobsClient({ jobs }: { jobs: Job[] }) {
   const router = useRouter();
+  const [items, setItems] = useState(jobs);
+  const [cancelling, setCancelling] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!items.some((job) => ["queued", "running", "paused"].includes(job.status))) return;
+    const timer = window.setInterval(async () => {
+      const response = await fetch("/api/search-jobs", { cache: "no-store" });
+      if (!response.ok) return;
+      const payload = await response.json();
+      setItems(payload.jobs ?? []);
+    }, 3000);
+    return () => window.clearInterval(timer);
+  }, [items]);
 
   async function cancel(id: string) {
+    setCancelling(id);
     await fetch(`/api/search-jobs/${id}/cancel`, { method: "POST" });
+    setCancelling(null);
     router.refresh();
   }
 
   return (
     <div className="space-y-3">
-      {jobs.map((job) => (
+      {items.map((job) => (
         <article key={job.id} className="rounded-md border border-line bg-white p-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
@@ -49,6 +67,13 @@ export function SearchJobsClient({ jobs }: { jobs: Job[] }) {
             </div>
             <Badge tone={statusTone(job.status) as any}>{job.status}</Badge>
           </div>
+          <div className="mt-4 h-2 overflow-hidden rounded-full bg-mist" aria-label="Keresési előrehaladás">
+            <div
+              className="h-full rounded-full bg-forest transition-[width]"
+              style={{ width: `${leadProgress(job.status, job.raw_records_count, job.desired_count)}%` }}
+            />
+          </div>
+          <p className="mt-1 text-xs text-ink/55">{job.status === "completed" ? "Kész" : `Feldolgozva: ${job.raw_records_count} / ${job.desired_count}`}</p>
           <dl className="mt-4 grid grid-cols-2 gap-3 text-sm md:grid-cols-7">
             <div><dt className="text-ink/55">Részfeladat</dt><dd className="font-medium">{job.processed_tasks_count}</dd></div>
             <div><dt className="text-ink/55">Nyers</dt><dd className="font-medium">{job.raw_records_count}</dd></div>
@@ -60,7 +85,7 @@ export function SearchJobsClient({ jobs }: { jobs: Job[] }) {
           </dl>
           {job.error_message ? <p className="mt-3 rounded-md border border-clay/25 bg-clay/10 px-3 py-2 text-sm text-clay">{job.error_message}</p> : null}
           {["queued", "running", "paused"].includes(job.status) ? (
-            <button onClick={() => cancel(job.id)} className="mt-4 inline-flex items-center gap-2 rounded-md border border-clay/30 px-3 py-2 text-sm font-medium text-clay">
+            <button disabled={cancelling === job.id} onClick={() => cancel(job.id)} className="mt-4 inline-flex items-center gap-2 rounded-md border border-clay/30 px-3 py-2 text-sm font-medium text-clay disabled:opacity-50">
               <Square className="size-4" aria-hidden="true" />
               Megszakítás
             </button>

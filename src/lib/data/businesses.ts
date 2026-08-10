@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { normalizeDomain, normalizePhone, normalizeUrl } from "@/lib/normalizers";
+import { normalizeDomain, normalizeEmail, normalizePhone, normalizeUrl } from "@/lib/normalizers";
 import type { BusinessQuery } from "@/lib/validators";
 
 export type BusinessRow = {
@@ -23,6 +23,9 @@ export type BusinessRow = {
   rating: number | null;
   rating_count: number | null;
   source: string;
+  lead_status?: "new" | "contacted" | "follow_up" | "interested" | "not_interested" | "converted";
+  status_updated_at?: string;
+  contacted_at?: string | null;
   email_count: number;
   email_crawl_status: string;
   email_crawl_checked_at: string | null;
@@ -60,7 +63,9 @@ const sortColumns = new Set([
   "source",
   "created_at",
   "updated_at",
-  "email_count"
+  "email_count",
+  "lead_status",
+  "status_updated_at"
 ]);
 
 async function filterByMembership(
@@ -139,6 +144,9 @@ export async function listBusinesses(client: SupabaseClient, ownerId: string, qu
   }
   if (query.source) {
     request = request.eq("source", query.source);
+  }
+  if (query.status) {
+    request = request.eq("lead_status", query.status);
   }
   if (listIds) {
     request = listIds.length === 0 ? request.eq("id", "00000000-0000-0000-0000-000000000000") : request.in("id", listIds);
@@ -274,6 +282,13 @@ export async function updateBusiness(client: SupabaseClient, ownerId: string, id
     updates.notes = patch.notes || null;
     manualOverrides.notes = true;
   }
+  if ("leadStatus" in patch) {
+    updates.lead_status = patch.leadStatus;
+    updates.status_updated_at = new Date().toISOString();
+    if (patch.leadStatus === "contacted") {
+      updates.contacted_at = new Date().toISOString();
+    }
+  }
 
   if (Object.keys(manualOverrides).length > 0) {
     updates.manual_overrides = manualOverrides;
@@ -323,20 +338,41 @@ export async function setBusinessEmails(client: SupabaseClient, ownerId: string,
     return;
   }
 
+  const { data: existingEmails, error: existingError } = await client
+    .from("business_emails")
+    .select("email,source,is_primary")
+    .eq("owner_id", ownerId)
+    .eq("business_id", businessId);
+  if (existingError) throw existingError;
+
+  const manualEmails = new Set(
+    (existingEmails ?? [])
+      .filter((item) => item.source === "manual")
+      .map((item) => normalizeEmail(item.email))
+      .filter((email): email is string => Boolean(email))
+  );
+  const protectedManualEmail = manualEmails.size > 0;
+  const discoveredEmails = emails.filter((item) => !manualEmails.has(normalizeEmail(item.email) ?? ""));
+
   await client
     .from("business_emails")
     .update({ is_primary: false })
     .eq("owner_id", ownerId)
-    .eq("business_id", businessId);
+    .eq("business_id", businessId)
+    .neq("source", "manual");
 
-  const rows = emails.map((item, index) => ({
+  const rows = discoveredEmails.map((item, index) => ({
     owner_id: ownerId,
     business_id: businessId,
     email: item.email,
     source_url: item.sourceUrl ?? null,
     source: item.source ?? "website",
-    is_primary: item.isPrimary ?? index === 0
+    is_primary: !protectedManualEmail && (item.isPrimary ?? index === 0)
   }));
+
+  if (rows.length === 0) {
+    return;
+  }
 
   const { error } = await client.from("business_emails").upsert(rows, {
     onConflict: "business_id,normalized_email",

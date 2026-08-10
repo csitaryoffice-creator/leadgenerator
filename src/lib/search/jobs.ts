@@ -480,6 +480,19 @@ async function crawlAndPersist(client: SupabaseClient, ownerId: string, business
   return result;
 }
 
+async function queueSearchEmailCrawl(client: SupabaseClient, job: SearchJobRow, businessId: string, websiteUrl: string) {
+  const { error } = await client.from("search_tasks").upsert(
+    {
+      owner_id: job.owner_id,
+      job_id: job.id,
+      task_key: `crawl:${businessId}`,
+      params: { type: "crawl", businessId, websiteUrl } satisfies CrawlTaskParams
+    },
+    { onConflict: "job_id,task_key" }
+  );
+  if (error) throw error;
+}
+
 async function processSearch(client: SupabaseClient, task: SearchTaskRow, job: SearchJobRow, params: SearchTaskParams) {
   const remainingAtStart = await getRemainingNewLeadSlots(client, job.id, job.desired_count);
   const savedBeforeTask = job.desired_count - remainingAtStart;
@@ -504,8 +517,6 @@ async function processSearch(client: SupabaseClient, task: SearchTaskRow, job: S
   let saved = 0;
   let duplicate = 0;
   let saveFailures = 0;
-  let crawled = 0;
-  let emails = 0;
 
   for (const place of places) {
     if (!canSaveNewLead(job.desired_count, savedBeforeTask, saved)) {
@@ -560,10 +571,8 @@ async function processSearch(client: SupabaseClient, task: SearchTaskRow, job: S
       saved += 1;
     }
 
-    if (job.auto_email_crawl && place.website_url) {
-      const crawl = await crawlAndPersist(client, job.owner_id, result.businessId, place.website_url);
-      crawled += crawl.pagesChecked > 0 ? 1 : 0;
-      emails += crawl.emails.length;
+    if (job.auto_email_crawl && place.website_url && !result.duplicate) {
+      await queueSearchEmailCrawl(client, job, result.businessId, place.website_url);
     }
   }
 
@@ -588,8 +597,8 @@ async function processSearch(client: SupabaseClient, task: SearchTaskRow, job: S
     excludedRecords: excluded,
     savedBusinesses: saved,
     duplicateBusinesses: duplicate,
-    crawledWebsites: crawled,
-    foundEmails: emails
+    crawledWebsites: 0,
+    foundEmails: 0
   });
   await finishTask(client, task.id, "completed");
 }

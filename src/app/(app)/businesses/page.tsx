@@ -37,6 +37,18 @@ export default async function BusinessesPage({
           <input name="city" defaultValue={query.city} className="mt-1 w-full rounded-md border border-line px-3 py-2 focus:border-forest focus:outline-none focus:ring-2 focus:ring-forest/15" />
         </label>
         <label className="text-sm font-medium">
+          Státusz
+          <select name="status" defaultValue={query.status} className="mt-1 w-full rounded-md border border-line px-3 py-2">
+            <option value="">Mindegy</option>
+            <option value="new">Új</option>
+            <option value="contacted">Megkeresve</option>
+            <option value="follow_up">Utánkövetés</option>
+            <option value="interested">Érdeklődik</option>
+            <option value="not_interested">Nem érdekli</option>
+            <option value="converted">Konvertált</option>
+          </select>
+        </label>
+        <label className="text-sm font-medium">
           Weboldal
           <select name="website" defaultValue={query.website} className="mt-1 w-full rounded-md border border-line px-3 py-2">
             <option value="">Mindegy</option>

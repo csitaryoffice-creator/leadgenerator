@@ -10,6 +10,8 @@ export function BusinessDetail({ business }: { business: BusinessRow & { busines
   const router = useRouter();
   const [message, setMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [emailDraft, setEmailDraft] = useState("");
+  const [editingEmailId, setEditingEmailId] = useState<string | null>(null);
 
   function submit(formData: FormData) {
     setMessage(null);
@@ -26,7 +28,8 @@ export function BusinessDetail({ business }: { business: BusinessRow & { busines
           formattedAddress: formData.get("formattedAddress") || null,
           phoneInternational: formData.get("phoneInternational") || null,
           websiteUrl: formData.get("websiteUrl") || null,
-          notes: formData.get("notes") || null
+          notes: formData.get("notes") || null,
+          leadStatus: formData.get("leadStatus")
         })
       });
       const payload = await response.json();
@@ -49,6 +52,27 @@ export function BusinessDetail({ business }: { business: BusinessRow & { busines
     await fetch(`/api/businesses/${business.id}`, { method: "DELETE" });
     router.push("/businesses");
     router.refresh();
+  }
+
+  async function saveEmail() {
+    const response = await fetch(`/api/businesses/${business.id}/emails`, {
+      method: editingEmailId ? "PUT" : "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id: editingEmailId, email: emailDraft, isPrimary: false })
+    });
+    const payload = await response.json().catch(() => ({}));
+    setMessage(response.ok ? "E-mail mentve." : payload.error ?? "Az e-mail nem menthető.");
+    if (response.ok) {
+      setEmailDraft("");
+      setEditingEmailId(null);
+      router.refresh();
+    }
+  }
+
+  async function deleteEmail(emailId: string) {
+    const response = await fetch(`/api/businesses/${business.id}/emails?emailId=${encodeURIComponent(emailId)}`, { method: "DELETE" });
+    setMessage(response.ok ? "E-mail törölve." : "Az e-mail nem törölhető.");
+    if (response.ok) router.refresh();
   }
 
   return (
@@ -95,6 +119,17 @@ export function BusinessDetail({ business }: { business: BusinessRow & { busines
           Cím
           <input name="formattedAddress" defaultValue={business.formatted_address ?? ""} className="mt-1 w-full rounded-md border border-line px-3 py-2 focus:border-forest focus:outline-none focus:ring-2 focus:ring-forest/15" />
         </label>
+        <label className="text-sm font-medium">
+          Státusz
+          <select name="leadStatus" defaultValue={business.lead_status ?? "new"} className="mt-1 w-full rounded-md border border-line px-3 py-2">
+            <option value="new">Új</option>
+            <option value="contacted">Megkeresve</option>
+            <option value="follow_up">Utánkövetés</option>
+            <option value="interested">Érdeklődik</option>
+            <option value="not_interested">Nem érdekli</option>
+            <option value="converted">Konvertált</option>
+          </select>
+        </label>
         <label className="text-sm font-medium md:col-span-2">
           Saját megjegyzés
           <textarea name="notes" defaultValue={business.notes ?? ""} rows={4} className="mt-1 w-full rounded-md border border-line px-3 py-2 focus:border-forest focus:outline-none focus:ring-2 focus:ring-forest/15" />
@@ -113,12 +148,28 @@ export function BusinessDetail({ business }: { business: BusinessRow & { busines
               business.business_emails.map((email) => (
                 <div key={email.id} className="flex items-center justify-between rounded-md border border-line px-3 py-2 text-sm">
                   <span>{email.email}</span>
+                  <div className="flex items-center gap-2">
+                    <button type="button" onClick={() => { setEditingEmailId(email.id); setEmailDraft(email.email); }} className="text-xs text-forest hover:underline">Módosítás</button>
+                    <button type="button" onClick={() => void deleteEmail(email.id)} className="text-xs text-clay hover:underline">Törlés</button>
+                  </div>
                   {email.is_primary ? <Badge tone="green">Elsődleges</Badge> : <Badge>Másodlagos</Badge>}
                 </div>
               ))
             ) : (
               <p className="text-sm text-ink/60">Nincs mentett e-mail.</p>
             )}
+          </div>
+          <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+            <input
+              aria-label="E-mail-cím"
+              value={emailDraft}
+              onChange={(event) => setEmailDraft(event.target.value)}
+              placeholder="nev@ceg.hu"
+              className="min-w-0 flex-1 rounded-md border border-line px-3 py-2 text-sm"
+            />
+            <button type="button" onClick={() => void saveEmail()} disabled={isPending || !emailDraft.trim()} className="rounded-md bg-forest px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">
+              {editingEmailId ? "Módosítás" : "Hozzáadás"}
+            </button>
           </div>
           <button
             disabled={isPending || !business.website_url}

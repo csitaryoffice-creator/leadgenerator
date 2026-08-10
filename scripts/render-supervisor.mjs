@@ -5,13 +5,13 @@ import { spawn } from "node:child_process";
 const processes = [
   {
     name: "web",
-    command: "pnpm",
-    args: ["exec", "next", "start", "-p", process.env.PORT ?? "3000"]
+    command: process.execPath,
+    args: ["--max-old-space-size=256", "node_modules/next/dist/bin/next", "start", "-p", process.env.PORT ?? "3000"]
   },
   {
     name: "worker",
-    command: "pnpm",
-    args: ["worker"]
+    command: process.execPath,
+    args: ["--max-old-space-size=192", "node_modules/tsx/dist/cli.mjs", "src/worker.ts"]
   }
 ];
 
@@ -77,7 +77,7 @@ function stopAll(exitCode) {
 function startProcess(definition) {
   const child = spawn(definition.command, definition.args, {
     env: process.env,
-    shell: true,
+    shell: false,
     stdio: "inherit"
   });
 

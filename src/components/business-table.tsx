@@ -15,6 +15,15 @@ import { Badge } from "@/components/ui";
 
 const columnHelper = createColumnHelper<BusinessRow>();
 
+const statusOptions = [
+  ["new", "Új"],
+  ["contacted", "Megkeresve"],
+  ["follow_up", "Utánkövetés"],
+  ["interested", "Érdeklődik"],
+  ["not_interested", "Nem érdekli"],
+  ["converted", "Konvertált"]
+] as const;
+
 function displayEmail(row: BusinessRow) {
   return row.business_emails?.find((email) => email.is_primary)?.email ?? row.business_emails?.[0]?.email ?? "";
 }
@@ -33,6 +42,18 @@ export function BusinessTable({
   const router = useRouter();
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [isPending, startTransition] = useTransition();
+  const [statusPending, setStatusPending] = useState<string | null>(null);
+
+  async function updateStatus(id: string, leadStatus: string) {
+    setStatusPending(id);
+    await fetch(`/api/businesses/${id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ leadStatus })
+    });
+    setStatusPending(null);
+    router.refresh();
+  }
 
   const columns = useMemo(
     () => [
@@ -59,6 +80,21 @@ export function BusinessTable({
       }),
       columnHelper.accessor("primary_category", { header: "Kategória", cell: (info) => info.getValue() ?? "-" }),
       columnHelper.accessor("city", { header: "Város", cell: (info) => info.getValue() ?? "-" }),
+      columnHelper.accessor("lead_status", {
+        header: "Státusz",
+        cell: ({ row }) => (
+          <select
+            aria-label={`${row.original.display_name} státusza`}
+            value={row.original.lead_status ?? "new"}
+            disabled={statusPending === row.original.id}
+            onClick={(event) => event.stopPropagation()}
+            onChange={(event) => void updateStatus(row.original.id, event.target.value)}
+            className="rounded-md border border-line bg-white px-2 py-1 text-xs font-medium"
+          >
+            {statusOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select>
+        )
+      }),
       columnHelper.accessor("website_url", {
         header: "Weboldal",
         cell: (info) =>
@@ -75,7 +111,7 @@ export function BusinessTable({
       columnHelper.accessor("rating", { header: "Értékelés", cell: (info) => info.getValue() ?? "-" }),
       columnHelper.accessor("source", { header: "Forrás", cell: (info) => <Badge>{info.getValue()}</Badge> })
     ],
-    [selected]
+    [selected, statusPending]
   );
 
   const table = useReactTable({
@@ -148,7 +184,10 @@ export function BusinessTable({
           </thead>
           <tbody>
             {table.getRowModel().rows.map((row) => (
-              <tr key={row.original.id} className="border-b border-line last:border-0 hover:bg-mist/70">
+              <tr key={row.original.id} onClick={(event) => {
+                if ((event.target as HTMLElement).closest("a,button,input,select")) return;
+                router.push(`/businesses/${row.original.id}`);
+              }} className={`cursor-pointer border-b border-line last:border-0 hover:bg-mist/70 ${row.original.lead_status === "converted" ? "bg-forest/5" : row.original.lead_status === "not_interested" ? "bg-clay/5" : ""}`}>
                 {row.getVisibleCells().map((cell) => (
                   <td key={cell.id} className="px-3 py-3 align-top">
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
@@ -167,11 +206,24 @@ export function BusinessTable({
 
       <div className="space-y-3 md:hidden">
         {rows.map((row) => (
-          <article key={row.id} className="rounded-md border border-line bg-white p-4">
+          <article key={row.id} onClick={(event) => {
+            if ((event.target as HTMLElement).closest("a,button,input,select")) return;
+            router.push(`/businesses/${row.id}`);
+          }} className={`cursor-pointer rounded-md border border-line bg-white p-4 ${row.lead_status === "converted" ? "bg-forest/5" : row.lead_status === "not_interested" ? "bg-clay/5" : ""}`}>
             <Link href={`/businesses/${row.id}`} className="font-semibold text-forest">
               {row.display_name}
             </Link>
             <p className="mt-1 text-sm text-ink/65">{[row.primary_category, row.city].filter(Boolean).join(" · ") || "Nincs kategória"}</p>
+            <select
+              aria-label={`${row.display_name} státusza`}
+              value={row.lead_status ?? "new"}
+              disabled={statusPending === row.id}
+              onClick={(event) => event.stopPropagation()}
+              onChange={(event) => void updateStatus(row.id, event.target.value)}
+              className="mt-3 rounded-md border border-line bg-white px-2 py-1 text-xs font-medium"
+            >
+              {statusOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
             <div className="mt-3 flex flex-wrap gap-2 text-xs">
               {displayEmail(row) ? <Badge tone="green"><Mail className="mr-1 size-3" aria-hidden="true" /> E-mail</Badge> : <Badge>Nincs e-mail</Badge>}
               {row.website_url ? <Badge tone="blue">Weboldal</Badge> : <Badge>Nincs weboldal</Badge>}
