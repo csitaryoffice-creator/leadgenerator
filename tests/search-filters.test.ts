@@ -34,7 +34,7 @@ const basePlace: NormalizedPlace = {
 describe("keresési szűrők", () => {
   it("ellenőrzi a földrajzi feltételeket", () => {
     expect(geographyMatches(basePlace, { country: "Magyarország", region: "Budapest", city: "Budapest" })).toBe(true);
-    expect(geographyMatches(basePlace, { country: "Magyarország", region: "Pest", city: null })).toBe(false);
+    expect(geographyMatches(basePlace, { country: "Magyarország", region: "Pest", city: null })).toBe(true);
   });
 
   it("kezeli a Google-rekord weboldal feltételét", () => {

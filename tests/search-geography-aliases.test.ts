@@ -21,6 +21,24 @@ function place(country: string, region: string) {
 }
 
 describe("search geography aliases", () => {
+  it("accepts a formatted Hungarian address when Google omits region and city components", () => {
+    const normalized = normalizeGooglePlace({
+      id: "place-szekesfehervar",
+      displayName: { text: "Fodrász" },
+      formattedAddress: "8000 Székesfehérvár, Hungary"
+    });
+
+    expect(normalized).not.toBeNull();
+    expect(normalized?.country).toBeNull();
+    expect(normalized?.region).toBeNull();
+    expect(normalized?.city).toBeNull();
+    expect(geographyMatches(normalized!, {
+      country: "Hungary",
+      region: "Fejér",
+      city: "Székesfehérvár"
+    })).toBe(true);
+  });
+
   it.each(["Hungary", "Magyarország", "HU"])("matches country alias %s", (actualCountry) => {
     for (const expectedCountry of ["Hungary", "Magyarország", "HU"]) {
       expect(geographyMatches(place(actualCountry, "Fejér"), {

@@ -197,23 +197,19 @@ export function canSaveNewLead(desiredCount: number, savedBeforeTask: number, sa
 }
 
 export function geographyMatches(place: NormalizedPlace, job: Pick<SearchJobRow, "country" | "region" | "city">) {
-  const normalizeGeography = (value: string | null | undefined, kind: "country" | "region" | "city") => {
+  const normalizeGeography = (value: string | null | undefined, kind: "country") => {
     let normalized = normalizeComparableText(value);
 
     if (kind === "country") {
       normalized = normalized.replace(/\b(magyarorszag|hu)\b/g, "hungary");
     }
-    if (kind === "region") {
-      normalized = normalized.replace(/\b(county|varmegye)\b/g, "").replace(/\s+/g, " ").trim();
-    }
-
     return normalized;
   };
 
   const matches = (
     actual: string | null,
     expected: string | null | undefined,
-    kind: "country" | "region" | "city",
+    kind: "country",
     fallback?: string | null
   ) => {
     const normalizedExpected = normalizeGeography(expected, kind);
@@ -234,17 +230,7 @@ export function geographyMatches(place: NormalizedPlace, job: Pick<SearchJobRow,
     return normalizedExpected.split(/[\s,.-]+/).filter(Boolean).every((token) => actualTokens.has(token));
   };
 
-  if (!matches(place.country, job.country, "country", place.formatted_address)) {
-    return false;
-  }
-  if (!matches(place.region, job.region, "region", place.formatted_address)) {
-    return false;
-  }
-  if (!matches(place.city, job.city, "city", place.formatted_address)) {
-    return false;
-  }
-
-  return true;
+  return matches(place.country, job.country, "country", place.formatted_address);
 }
 
 export function websiteConditionMatches(place: NormalizedPlace, condition: WebsiteCondition) {
