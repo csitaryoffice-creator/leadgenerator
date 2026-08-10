@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PLACE_SEARCH_FIELD_MASK, normalizeGooglePlace } from "@/lib/google/places";
+import { PLACE_SEARCH_FIELD_MASK, buildTextSearchQuery, normalizeGooglePlace } from "@/lib/google/places";
 import type { GoogleAddressComponent, GooglePlace } from "@/lib/google/types";
 
 function googlePlace(addressComponents?: GoogleAddressComponent[]): GooglePlace {
@@ -14,6 +14,10 @@ function googlePlace(addressComponents?: GoogleAddressComponent[]): GooglePlace 
 describe("Google Places address normalization", () => {
   it("requests address components in the text search field mask", () => {
     expect(PLACE_SEARCH_FIELD_MASK).toContain("places.addressComponents");
+  });
+
+  it("does not send the Minden category as a Google search term", () => {
+    expect(buildTextSearchQuery("Minden", "Hungary", "Fejér", null)).toBe("Fejér Hungary");
   });
 
   it("keeps country null when Google omits the country component", () => {

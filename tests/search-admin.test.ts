@@ -63,6 +63,18 @@ describe("search job server ownership", () => {
 
     expect(client.inserts.search_jobs).toHaveLength(1);
     expect(client.inserts.search_tasks).toHaveLength(1);
+    expect(client.inserts.search_jobs[0]?.params).toEqual(parsed);
+    expect(client.inserts.search_jobs[0]).toMatchObject({
+      category: parsed.category,
+      desired_count: parsed.desiredCount,
+      country: parsed.country,
+      region: parsed.region,
+      city: parsed.city,
+      website_condition: parsed.websiteCondition,
+      target_folder_id: parsed.targetFolderId,
+      target_list_id: parsed.targetListId,
+      auto_email_crawl: parsed.autoEmailCrawl
+    });
     expect(client.inserts.search_jobs[0]?.owner_id).toBe(verifiedOwnerId);
     expect(client.inserts.search_tasks[0]?.owner_id).toBe(verifiedOwnerId);
   });

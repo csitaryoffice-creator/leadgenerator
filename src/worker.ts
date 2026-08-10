@@ -1,9 +1,10 @@
+import { pathToFileURL } from "node:url";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { claimSearchTask, processSearchTask } from "@/lib/search/jobs";
 import { log } from "@/lib/logger";
 
 const idleMs = 3000;
-const client = createAdminClient();
 
 let shuttingDown = false;
 
@@ -20,6 +21,10 @@ async function sleep(ms: number) {
 }
 
 async function main() {
+  return runWorker(createAdminClient());
+}
+
+export async function runWorker(client: SupabaseClient) {
   log("info", "Leadgyűjtő worker elindult.");
 
   while (!shuttingDown) {
@@ -45,7 +50,9 @@ async function main() {
   log("info", "Leadgyűjtő worker leáll.");
 }
 
-main().catch((error) => {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error) => {
   log("error", "Worker végzetes hibával leállt.", { error });
-  process.exit(1);
-});
+    process.exit(1);
+  });
+}

@@ -1,5 +1,5 @@
 import { getServerEnv } from "@/lib/env";
-import { normalizeDomain, normalizePhone, normalizeUrl } from "@/lib/normalizers";
+import { normalizeComparableText, normalizeDomain, normalizePhone, normalizeUrl } from "@/lib/normalizers";
 import { reserveGoogleApiCall } from "@/lib/google/usage";
 import type { GoogleAddressComponent, GooglePlace, GoogleViewport, NormalizedPlace } from "@/lib/google/types";
 
@@ -207,7 +207,8 @@ export async function resolveAreaViewport(input: ResolveAreaInput) {
 }
 
 export function buildTextSearchQuery(category: string, country: string, region?: string | null, city?: string | null) {
-  return [category, city, region, country].filter(Boolean).join(" ");
+  const normalizedCategory = normalizeComparableText(category);
+  return [normalizedCategory === "minden" ? null : category, city, region, country].filter(Boolean).join(" ");
 }
 
 export function googlePlaceHasPhone(place: NormalizedPlace) {

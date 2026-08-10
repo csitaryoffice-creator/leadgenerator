@@ -197,13 +197,31 @@ export function canSaveNewLead(desiredCount: number, savedBeforeTask: number, sa
 }
 
 export function geographyMatches(place: NormalizedPlace, job: Pick<SearchJobRow, "country" | "region" | "city">) {
-  const matches = (actual: string | null, expected: string | null | undefined, fallback?: string | null) => {
-    const normalizedExpected = normalizeComparableText(expected);
+  const normalizeGeography = (value: string | null | undefined, kind: "country" | "region" | "city") => {
+    let normalized = normalizeComparableText(value);
+
+    if (kind === "country") {
+      normalized = normalized.replace(/\b(magyarorszag|hu)\b/g, "hungary");
+    }
+    if (kind === "region") {
+      normalized = normalized.replace(/\b(county|varmegye)\b/g, "").replace(/\s+/g, " ").trim();
+    }
+
+    return normalized;
+  };
+
+  const matches = (
+    actual: string | null,
+    expected: string | null | undefined,
+    kind: "country" | "region" | "city",
+    fallback?: string | null
+  ) => {
+    const normalizedExpected = normalizeGeography(expected, kind);
     if (!normalizedExpected) {
       return true;
     }
 
-    const normalizedActual = normalizeComparableText(actual) || normalizeComparableText(fallback);
+    const normalizedActual = normalizeGeography(actual, kind) || normalizeGeography(fallback, kind);
     if (!normalizedActual) {
       return false;
     }
@@ -216,13 +234,13 @@ export function geographyMatches(place: NormalizedPlace, job: Pick<SearchJobRow,
     return normalizedExpected.split(/[\s,.-]+/).filter(Boolean).every((token) => actualTokens.has(token));
   };
 
-  if (!matches(place.country, job.country, place.formatted_address)) {
+  if (!matches(place.country, job.country, "country", place.formatted_address)) {
     return false;
   }
-  if (!matches(place.region, job.region, place.formatted_address)) {
+  if (!matches(place.region, job.region, "region", place.formatted_address)) {
     return false;
   }
-  if (!matches(place.city, job.city, place.formatted_address)) {
+  if (!matches(place.city, job.city, "city", place.formatted_address)) {
     return false;
   }
 
@@ -499,6 +517,7 @@ async function processSearch(client: SupabaseClient, task: SearchTaskRow, job: S
   let excludedByWebsiteCondition = 0;
   let saved = 0;
   let duplicate = 0;
+  let saveFailures = 0;
   let crawled = 0;
   let emails = 0;
 
@@ -537,7 +556,18 @@ async function processSearch(client: SupabaseClient, task: SearchTaskRow, job: S
       continue;
     }
 
-    const result = await saveGooglePlace(client, job, place);
+    let result: { businessId: string; duplicate: boolean };
+    try {
+      result = await saveGooglePlace(client, job, place);
+    } catch {
+      saveFailures += 1;
+      log("warn", "Google place could not be saved.", {
+        businessName: place.display_name,
+        formattedAddress: place.formatted_address,
+        exclusionReason: "save_failure"
+      });
+      continue;
+    }
     if (result.duplicate) {
       duplicate += 1;
     } else {
@@ -555,11 +585,14 @@ async function processSearch(client: SupabaseClient, task: SearchTaskRow, job: S
     await cancelQueuedSearchTasks(client, job.id);
   }
 
-  if (excluded > 0) {
+  if (excluded > 0 || duplicate > 0 || saveFailures > 0) {
     log("info", "Google place exclusion summary.", {
-      excluded,
-      excludedByGeography,
-      excludedByWebsiteCondition
+      exclusionCounts: {
+        geography_mismatch: excludedByGeography,
+        website_condition_mismatch: excludedByWebsiteCondition,
+        duplicate,
+        save_failure: saveFailures
+      }
     });
   }
 
