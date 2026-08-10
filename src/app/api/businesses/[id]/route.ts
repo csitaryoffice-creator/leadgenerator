@@ -26,8 +26,13 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Hibás módosítás." }, { status: 422 });
   }
 
-  const business = await updateBusiness(auth.supabase, auth.user.id, id, parsed.data);
-  return NextResponse.json({ business });
+  try {
+    const business = await updateBusiness(auth.supabase, auth.user.id, id, parsed.data);
+    return NextResponse.json({ business });
+  } catch (error) {
+    console.error("Business update failed", error);
+    return NextResponse.json({ error: "A vállalkozás módosítása nem sikerült." }, { status: 500 });
+  }
 }
 
 export async function DELETE(_request: Request, context: { params: Promise<{ id: string }> }) {

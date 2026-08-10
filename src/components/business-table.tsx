@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import {
   createColumnHelper,
   flexRender,
@@ -43,16 +43,34 @@ export function BusinessTable({
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [isPending, startTransition] = useTransition();
   const [statusPending, setStatusPending] = useState<string | null>(null);
+  const [statusValues, setStatusValues] = useState<Record<string, BusinessRow["lead_status"]>>({});
+  const [statusError, setStatusError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setStatusValues(Object.fromEntries(rows.map((row) => [row.id, row.lead_status ?? "new"])));
+  }, [rows]);
 
   async function updateStatus(id: string, leadStatus: string) {
+    const previous = statusValues[id] ?? "new";
+    setStatusError(null);
     setStatusPending(id);
-    await fetch(`/api/businesses/${id}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ leadStatus })
-    });
-    setStatusPending(null);
-    router.refresh();
+    try {
+      const response = await fetch(`/api/businesses/${id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ leadStatus })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.error ?? "A státusz mentése nem sikerült.");
+      }
+      setStatusValues((state) => ({ ...state, [id]: leadStatus as BusinessRow["lead_status"] }));
+    } catch (error) {
+      setStatusValues((state) => ({ ...state, [id]: previous }));
+      setStatusError(error instanceof Error ? error.message : "A státusz mentése nem sikerült.");
+    } finally {
+      setStatusPending(null);
+    }
   }
 
   const columns = useMemo(
@@ -85,7 +103,7 @@ export function BusinessTable({
         cell: ({ row }) => (
           <select
             aria-label={`${row.original.display_name} státusza`}
-            value={row.original.lead_status ?? "new"}
+            value={statusValues[row.original.id] ?? "new"}
             disabled={statusPending === row.original.id}
             onClick={(event) => event.stopPropagation()}
             onChange={(event) => void updateStatus(row.original.id, event.target.value)}
@@ -111,7 +129,7 @@ export function BusinessTable({
       columnHelper.accessor("rating", { header: "Értékelés", cell: (info) => info.getValue() ?? "-" }),
       columnHelper.accessor("source", { header: "Forrás", cell: (info) => <Badge>{info.getValue()}</Badge> })
     ],
-    [selected, statusPending]
+    [selected, statusPending, statusValues]
   );
 
   const table = useReactTable({
@@ -148,7 +166,8 @@ export function BusinessTable({
   }
 
   return (
-    <div className="space-y-4">
+      <div className="space-y-4">
+      {statusError ? <p role="alert" className="rounded-md border border-clay/30 bg-clay/10 px-3 py-2 text-sm text-clay">{statusError}</p> : null}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-line bg-white p-3">
         <p className="text-sm text-ink/70">
           Találatok: <strong>{total}</strong> · Kijelölve: <strong>{selectedIds.length}</strong>
@@ -216,7 +235,7 @@ export function BusinessTable({
             <p className="mt-1 text-sm text-ink/65">{[row.primary_category, row.city].filter(Boolean).join(" · ") || "Nincs kategória"}</p>
             <select
               aria-label={`${row.display_name} státusza`}
-              value={row.lead_status ?? "new"}
+            value={statusValues[row.id] ?? "new"}
               disabled={statusPending === row.id}
               onClick={(event) => event.stopPropagation()}
               onChange={(event) => void updateStatus(row.id, event.target.value)}
