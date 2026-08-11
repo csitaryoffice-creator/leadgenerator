@@ -47,8 +47,8 @@ export const businessQuerySchema = z.object({
   phone: z.enum(["", "yes", "no"]).default(""),
   source: z.string().trim().optional().default(""),
   status: z.string().trim().optional().default(""),
-  folderId: z.string().uuid().optional().nullable(),
-  listId: z.string().uuid().optional().nullable(),
+  folderId: z.preprocess((value) => value === "" ? undefined : value, z.string().uuid().optional().nullable()),
+  listId: z.preprocess((value) => value === "" ? undefined : value, z.string().uuid().optional().nullable()),
   deleted: z.coerce.boolean().default(false)
 });
 

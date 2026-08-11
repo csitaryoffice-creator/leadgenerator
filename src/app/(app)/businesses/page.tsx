@@ -4,6 +4,7 @@ import { ManualBusinessForm } from "@/components/manual-business-form";
 import { EmptyState } from "@/components/ui";
 import { requirePageUser } from "@/lib/auth";
 import { listBusinesses } from "@/lib/data/businesses";
+import { listCollections } from "@/lib/data/collections";
 import { businessQuerySchema } from "@/lib/validators";
 
 export default async function BusinessesPage({
@@ -14,7 +15,10 @@ export default async function BusinessesPage({
   const { user, supabase } = await requirePageUser();
   const params = await searchParams;
   const query = businessQuerySchema.parse(params);
-  const result = await listBusinesses(supabase, user.id, query);
+  const [result, collections] = await Promise.all([
+    listBusinesses(supabase, user.id, query),
+    listCollections(supabase, user.id)
+  ]);
 
   return (
     <div className="space-y-5">
@@ -46,6 +50,20 @@ export default async function BusinessesPage({
             <option value="interested">Érdeklődik</option>
             <option value="not_interested">Nem érdekli</option>
             <option value="converted">Konvertált</option>
+          </select>
+        </label>
+        <label className="text-sm font-medium">
+          Mappa
+          <select name="folderId" defaultValue={query.folderId ?? ""} className="mt-1 w-full rounded-md border border-line px-3 py-2">
+            <option value="">Mindegy</option>
+            {collections.folders.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}
+          </select>
+        </label>
+        <label className="text-sm font-medium">
+          Lista
+          <select name="listId" defaultValue={query.listId ?? ""} className="mt-1 w-full rounded-md border border-line px-3 py-2">
+            <option value="">Mindegy</option>
+            {collections.lists.map((list) => <option key={list.id} value={list.id}>{list.name}</option>)}
           </select>
         </label>
         <label className="text-sm font-medium">
