@@ -55,7 +55,7 @@ export function BusinessTable({
     setStatusError(null);
     setStatusPending(id);
     try {
-      const response = await fetch(`/api/businesses/${id}`, {
+      const response = await fetch(`/api/businesses/${id}/status`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ leadStatus })

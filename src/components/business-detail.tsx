@@ -28,12 +28,21 @@ export function BusinessDetail({ business }: { business: BusinessRow & { busines
           formattedAddress: formData.get("formattedAddress") || null,
           phoneInternational: formData.get("phoneInternational") || null,
           websiteUrl: formData.get("websiteUrl") || null,
-          notes: formData.get("notes") || null,
-          leadStatus: formData.get("leadStatus")
+          notes: formData.get("notes") || null
         })
       });
       const payload = await response.json();
-      setMessage(response.ok ? "Mentve." : payload.error ?? "A módosítás nem sikerült.");
+      if (!response.ok) {
+        setMessage(payload.error ?? "A módosítás nem sikerült.");
+        return;
+      }
+      const statusResponse = await fetch(`/api/businesses/${business.id}/status`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ leadStatus: formData.get("leadStatus") })
+      });
+      const statusPayload = await statusResponse.json().catch(() => ({}));
+      setMessage(statusResponse.ok ? "Mentve." : statusPayload.error ?? "A státusz mentése nem sikerült.");
       router.refresh();
     });
   }

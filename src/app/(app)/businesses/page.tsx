@@ -4,7 +4,7 @@ import { ManualBusinessForm } from "@/components/manual-business-form";
 import { EmptyState } from "@/components/ui";
 import { requirePageUser } from "@/lib/auth";
 import { listBusinesses } from "@/lib/data/businesses";
-import { listCollections } from "@/lib/data/collections";
+import { listFilterCollections } from "@/lib/data/collections";
 import { businessQuerySchema } from "@/lib/validators";
 
 export default async function BusinessesPage({
@@ -17,7 +17,7 @@ export default async function BusinessesPage({
   const query = businessQuerySchema.parse(params);
   const [result, collections] = await Promise.all([
     listBusinesses(supabase, user.id, query),
-    listCollections(supabase, user.id)
+    listFilterCollections(supabase, user.id)
   ]);
 
   return (

@@ -20,6 +20,16 @@ export async function listCollections(client: SupabaseClient, ownerId: string) {
   };
 }
 
+export async function listFilterCollections(client: SupabaseClient, ownerId: string) {
+  const [folders, lists] = await Promise.all([
+    client.from("folders").select("id,name").eq("owner_id", ownerId).is("deleted_at", null).order("sort_order"),
+    client.from("lead_lists").select("id,name").eq("owner_id", ownerId).is("deleted_at", null).order("created_at", { ascending: false })
+  ]);
+  if (folders.error) throw folders.error;
+  if (lists.error) throw lists.error;
+  return { folders: folders.data ?? [], lists: lists.data ?? [] };
+}
+
 export async function createFolder(client: SupabaseClient, ownerId: string, name: string, parentId?: string | null) {
   const { data, error } = await client
     .from("folders")
